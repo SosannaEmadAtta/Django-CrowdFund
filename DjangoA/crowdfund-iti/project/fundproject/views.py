@@ -49,8 +49,66 @@ def create_project(request):
         # return render(request, 'project/project_list.html', context)
 
 
+# --------------------------------- List Project General-----------------------------------------
+@login_required(login_url='/login')
+def list_project(request):
+    project_list = []
+    rate_list = []
+    projects = Project.objects.all()
+
+    for project in projects:
+        project_list.append(Images.objects.filter(project_id=project.project_id))
+        rate_list.append(Rate.objects.filter(project_id=project.project_id))
+
+    context = {'project_list': project_list,
+               }
+    return render(request, 'project/project_list.html', context)
 
 
+# --------------------------------- HOME Page -----------------------------------------
+def home(request):
+    latestProjects = Project.objects.values('project_id').order_by('-start_date')[0:5]
+    FeaturedProjects = Project.objects.values('project_id')[0:5]
+    topratedProjects = Rate.objects.values('project_id').annotate(rate=Max('rate')).order_by('-rate')[0:5]
+
+    latestProjectsList = []
+
+    for project in latestProjects:
+        latestProjectsList.append(Images.objects.filter(project_id=project['project_id']))
+    featuredProjectsList = []
+
+    for project in FeaturedProjects:
+        featuredProjectsList.append(Images.objects.filter(project_id=project['project_id']))
+    topRatedProjectsList = []
+
+    for project in topratedProjects:
+        topRatedProjectsList.append(Images.objects.filter(project_id=project['project_id']))
+    print(topRatedProjectsList)
+    categories = Categories.objects.all()
+    context = {
+        'latestProjectsList': latestProjectsList,
+        'categories': categories,
+        'featuredProjectsList': featuredProjectsList,
+        'topRatedProjectsList': topRatedProjectsList,
+    }
+    return render(request, "home.html", context)
+
+
+# --------------------------------- List of Project in Category Page -----------------------------------------
+@login_required(login_url='/login')
+def project_list(request, id):
+    project_list = []
+    category = Categories.objects.get(category_id=id)
+    category_name = category.category_name
+    category_projects = Project.objects.filter(category_id=id).values('project_id')
+    for project in category_projects:
+        project_list.append(Images.objects.filter(project_id=project['project_id']))
+
+    context = {'project_list': project_list,
+               'category_name': category_name
+               }
+    print(project_list)
+    return render(request, 'list_projects.html', context)
 
 
 # --------------------------------- Project info -----------------------------------------
@@ -214,4 +272,26 @@ def add_rate(request, id):
         else:
             context['error_msg'] = "You have rated this project before"
             return render(request, 'project/add.rate.html', context)
+            
 
+# --------------------------------- Search Function-----------------------------------------
+# we use Q objects to make more complex queries following
+# Use | (OR) operator to search for only one field. For example, when searching title | content, both don’t have to be true, only one is okay, when searching for a word such as “python”, so it(python) doesn’t have to be contained in both title and content fields
+# https://stackpython.medium.com/django-search-with-q-objects-tutorial-9c701db74e0e
+def search(request):
+    project_list = []
+    if request.method == 'POST':
+        query = request.POST.get('query')
+        if query is not None:
+            projects = Q(title__icontains=query) | Q(tags__tag_name__icontains=query)
+            results = Project.objects.filter(projects).values('project_id').distinct()
+            print(results)
+            for project in results:
+                project_list.append(Images.objects.filter(project_id=project['project_id']))
+
+            return render(request, 'search_project.html', {'project_list': project_list})
+
+        else:
+            return render(request, 'search_project.html')
+    else:
+        return render(request, 'home.html')
